@@ -1,0 +1,1340 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LAB21 // v2.4</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;0,600;1,300&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+:root {
+  --bg:       #09090c;
+  --bg2:      #0f0f14;
+  --bg3:      #16161d;
+  --bg4:      #1c1c25;
+  --border:   #22222c;
+  --border2:  #2e2e3c;
+  --text:     #dddde8;
+  --text2:    #7878a0;
+  --text3:    #44445a;
+  --accent:   #6494ff;
+  --accent2:  #3d6fd4;
+  --green:    #3ecf6e;
+  --red:      #e05656;
+  --yellow:   #d4a843;
+  --purple:   #a78bfa;
+  --cyan:     #38bdf8;
+  --mono:     'IBM Plex Mono', monospace;
+  --sans:     'IBM Plex Sans', sans-serif;
+  --sw:  280px;  /* sidebar inferencia */
+  --spw: 272px;  /* panel sesiones */
+  --tbh: 42px;   /* topbar */
+  --ease: cubic-bezier(.4,0,.2,1);
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 13px; display: flex; flex-direction: column; }
+::-webkit-scrollbar { width: 3px; } ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+/* ── TOPBAR ── */
+#topbar {
+  height: var(--tbh); flex-shrink: 0;
+  background: var(--bg2); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 12px; gap: 10px; z-index: 60;
+}
+.tb-brand { font-family: var(--mono); font-size: 10px; font-weight: 600; color: var(--accent); letter-spacing: 2.5px; white-space: nowrap; }
+.tb-sep   { width: 1px; height: 18px; background: var(--border); flex-shrink: 0; }
+.tb-spacer { flex: 1; }
+
+/* Context pressure bar */
+#ctx-bar-wrap { display: flex; align-items: center; gap: 6px; }
+#ctx-label { font-family: var(--mono); font-size: 9px; color: var(--text3); white-space: nowrap; }
+#ctx-bar { width: 80px; height: 3px; background: var(--bg4); border-radius: 2px; overflow: hidden; }
+#ctx-fill { height: 100%; width: 0%; background: var(--green); border-radius: 2px; transition: width .3s var(--ease), background .3s; }
+#ctx-pct  { font-family: var(--mono); font-size: 9px; color: var(--text2); min-width: 28px; }
+
+/* Session clock */
+#ses-clock { font-family: var(--mono); font-size: 9px; color: var(--text2); white-space: nowrap; }
+#ses-clock b { color: var(--text); font-weight: 500; }
+
+/* Re-session badge */
+#resession-badge {
+  display: none; font-family: var(--mono); font-size: 9px; font-weight: 600;
+  color: var(--purple); background: rgba(167,139,250,.1);
+  border: 1px solid rgba(167,139,250,.3); padding: 2px 8px; border-radius: 2px;
+  letter-spacing: 1px; animation: bpulse 2.5s ease infinite;
+}
+@keyframes bpulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+
+/* Topbar buttons */
+.tbtn {
+  font-family: var(--mono); font-size: 9px; letter-spacing: .5px;
+  background: transparent; border: 1px solid var(--border);
+  color: var(--text2); padding: 3px 9px; border-radius: 2px;
+  cursor: pointer; transition: all .15s; white-space: nowrap;
+}
+.tbtn:hover { border-color: var(--border2); color: var(--text); background: var(--bg3); }
+.tbtn.on    { border-color: var(--accent); color: var(--accent); }
+.tbtn.red   { border-color: var(--red); color: var(--red); background: rgba(224,86,86,.08); }
+.tbtn.red:hover { background: rgba(224,86,86,.18); }
+.tbtn.accent { background: var(--accent2); border-color: var(--accent); color: #fff; }
+.tbtn.accent:hover { background: var(--accent); }
+
+/* STOP — siempre visible, inactivo cuando no genera */
+#btn-stop { opacity: .3; pointer-events: none; transition: opacity .2s; }
+#btn-stop.active { opacity: 1; pointer-events: auto; }
+
+/* ── WORKSPACE ── */
+#workspace { flex: 1; display: flex; overflow: hidden; position: relative; }
+
+/* ── SIDEBAR INFERENCIA ── */
+#sidebar {
+  width: var(--sw); flex-shrink: 0;
+  background: var(--bg2); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  transition: width .25s var(--ease), opacity .2s;
+}
+#sidebar.off { width: 0; opacity: 0; pointer-events: none; }
+
+/* ── PANEL SESIONES ── */
+#ses-panel {
+  width: var(--spw); flex-shrink: 0;
+  background: var(--bg2); border-left: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  transition: width .25s var(--ease), opacity .2s;
+}
+#ses-panel.off { width: 0; opacity: 0; pointer-events: none; }
+
+/* ── PANEL INTERNALS ── */
+.p-head {
+  padding: 10px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+  font-family: var(--mono); font-size: 8px; font-weight: 600;
+  color: var(--text3); letter-spacing: 2px; text-transform: uppercase;
+}
+.p-scroll { overflow-y: auto; flex: 1; }
+.p-section { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.p-label {
+  display: block; font-family: var(--mono); font-size: 8px;
+  color: var(--text3); letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 6px;
+}
+select {
+  width: 100%; background: var(--bg3); border: 1px solid var(--border);
+  color: var(--text); padding: 4px 8px; border-radius: 2px; outline: none;
+  font-family: var(--mono); font-size: 10px; cursor: pointer; appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%2344445a'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 8px center;
+}
+.meta-bar {
+  font-family: var(--mono); font-size: 8px; color: var(--accent);
+  background: rgba(100,148,255,.06); border: 1px solid rgba(100,148,255,.12);
+  padding: 4px 8px; border-radius: 2px; margin-top: 5px; line-height: 1.8;
+}
+textarea.sysp {
+  width: 100%; height: 100px; background: var(--bg3); border: 1px solid var(--border);
+  color: var(--text); padding: 7px; resize: none; border-radius: 2px;
+  font-family: var(--mono); font-size: 10px; outline: none; line-height: 1.5;
+}
+textarea.sysp:focus { border-color: var(--border2); }
+.sl-group { margin-top: 8px; }
+.sl-row { display:flex; justify-content:space-between; margin-bottom:3px; }
+.sl-name { font-family:var(--mono); font-size:9px; color:var(--text2); }
+.sl-val  { font-family:var(--mono); font-size:9px; color:var(--accent); font-weight:500; }
+input[type=range] { width:100%; accent-color:var(--accent); cursor:pointer; height:2px; }
+
+/* ── CHAT PRINCIPAL ── */
+#chat-container { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+
+/* Tabs de sesiones abiertas */
+#session-tabs {
+  display: flex; align-items: center; overflow-x: auto; flex-shrink: 0;
+  background: var(--bg2); border-bottom: 1px solid var(--border);
+  padding: 0 4px; gap: 2px; min-height: 34px;
+}
+#session-tabs::-webkit-scrollbar { height: 2px; }
+.s-tab {
+  display: flex; align-items: center; gap: 6px;
+  font-family: var(--mono); font-size: 9px; color: var(--text2);
+  background: transparent; border: 1px solid transparent;
+  padding: 4px 10px; border-radius: 2px; cursor: pointer; white-space: nowrap;
+  transition: all .15s; flex-shrink: 0;
+}
+.s-tab:hover { color: var(--text); background: var(--bg3); }
+.s-tab.active {
+  color: var(--accent); background: var(--bg3);
+  border-color: var(--border2);
+}
+.s-tab.resession { border-color: rgba(167,139,250,.3); }
+.s-tab .tab-close {
+  color: var(--text3); font-size: 9px; padding: 0 2px;
+  border: none; background: none; cursor: pointer; line-height: 1;
+}
+.s-tab .tab-close:hover { color: var(--red); }
+.s-tab .tab-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+.s-tab.resession .tab-dot { background: var(--purple); }
+#btn-new-tab {
+  font-family: var(--mono); font-size: 9px; color: var(--text3);
+  background: none; border: 1px dashed var(--border); border-radius: 2px;
+  padding: 3px 8px; cursor: pointer; flex-shrink: 0; transition: all .15s;
+}
+#btn-new-tab:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Chat views */
+#chat-views { flex: 1; overflow: hidden; position: relative; }
+.chat-view {
+  position: absolute; inset: 0;
+  overflow-y: auto; padding: 18px 22px;
+  display: flex; flex-direction: column; gap: 14px;
+  opacity: 0; pointer-events: none; transition: opacity .15s;
+}
+.chat-view.active { opacity: 1; pointer-events: auto; }
+
+/* ── MENSAJES ── */
+.msg { display: flex; flex-direction: column; max-width: 90%; animation: msgIn .2s ease; }
+@keyframes msgIn { from{opacity:0;transform:translateY(5px)} to{opacity:1;transform:none} }
+.msg.user      { align-self: flex-end;  align-items: flex-end; }
+.msg.assistant { align-self: flex-start; align-items: flex-start; }
+
+.msg-meta { font-family: var(--mono); font-size: 8px; color: var(--text3); padding: 0 3px; margin-bottom: 3px; }
+.msg-bubble {
+  padding: 10px 14px; border-radius: 3px;
+  line-height: 1.65; word-break: break-word;
+}
+.msg.user      .msg-bubble { background: var(--bg4); border: 1px solid var(--border2); }
+.msg.assistant .msg-bubble { background: var(--bg2); border: 1px solid var(--border);  }
+
+/* Markdown dentro de burbujas */
+.msg-bubble h1,.msg-bubble h2,.msg-bubble h3 { font-family: var(--mono); font-size: 11px; color: var(--accent); margin: 10px 0 5px; letter-spacing: 1px; }
+.msg-bubble p  { margin-bottom: 6px; }
+.msg-bubble ul,.msg-bubble ol { padding-left: 18px; margin-bottom: 6px; }
+.msg-bubble li { margin-bottom: 2px; }
+.msg-bubble code { font-family: var(--mono); font-size: 10px; background: var(--bg); padding: 1px 5px; border-radius: 2px; color: var(--cyan); }
+.msg-bubble pre { background: var(--bg); border: 1px solid var(--border); border-radius: 3px; padding: 10px; overflow-x: auto; margin: 8px 0; }
+.msg-bubble pre code { background: none; padding: 0; color: var(--text); }
+.msg-bubble strong { color: var(--text); font-weight: 500; }
+.msg-bubble blockquote { border-left: 2px solid var(--border2); padding-left: 10px; color: var(--text2); margin: 6px 0; }
+.msg-bubble table { border-collapse: collapse; font-size: 11px; margin: 6px 0; }
+.msg-bubble th,.msg-bubble td { border: 1px solid var(--border2); padding: 4px 8px; }
+.msg-bubble th { background: var(--bg3); color: var(--text2); }
+
+/* Badge editado */
+.edited-badge { font-family: var(--mono); font-size: 8px; color: var(--yellow); margin-left: 6px; }
+
+/* Separador de prompt cambiado */
+.prompt-change-sep {
+  align-self: stretch; display: flex; align-items: center; gap: 8px;
+  font-family: var(--mono); font-size: 8px; color: var(--text3);
+  padding: 4px 0;
+}
+.prompt-change-sep::before,.prompt-change-sep::after { content:''; flex:1; height:1px; background:var(--border); }
+
+/* Separador re-sesión */
+.resession-sep {
+  align-self: stretch; font-family: var(--mono); font-size: 9px;
+  color: var(--purple); background: rgba(167,139,250,.07);
+  border: 1px dashed rgba(167,139,250,.25); border-radius: 3px;
+  padding: 8px 12px; line-height: 1.6;
+}
+
+/* ── TURN TOOLS ── */
+.turn-tools { display: flex; align-items: center; gap: 8px; padding: 3px 3px 0; flex-wrap: wrap; }
+.t-metric { font-family: var(--mono); font-size: 8px; color: var(--accent2); }
+.t-btn {
+  font-family: var(--mono); font-size: 8px; color: var(--text3);
+  background: none; border: none; cursor: pointer; padding: 0; transition: color .15s;
+}
+.t-btn:hover { color: var(--text2); }
+.t-btn.danger:hover { color: var(--red); }
+.t-params {
+  display: none; font-family: var(--mono); font-size: 8px; color: var(--text3);
+  background: var(--bg); border: 1px dashed var(--border); padding: 5px 7px;
+  border-radius: 2px; line-height: 1.8; margin-top: 3px; width: 100%;
+}
+
+/* Edición inline */
+.edit-area {
+  width: 100%; background: var(--bg3); border: 1px solid var(--accent);
+  color: var(--text); padding: 8px; border-radius: 3px;
+  font-family: var(--sans); font-size: 13px; line-height: 1.6;
+  resize: vertical; outline: none; min-height: 60px;
+}
+.edit-actions { display: flex; gap: 6px; margin-top: 4px; }
+.edit-ok  { font-family:var(--mono); font-size:9px; background:var(--accent2); color:#fff; border:none; border-radius:2px; padding:4px 10px; cursor:pointer; }
+.edit-cancel { font-family:var(--mono); font-size:9px; background:transparent; color:var(--text2); border:1px solid var(--border); border-radius:2px; padding:4px 10px; cursor:pointer; }
+
+/* Select mode */
+.msg-cb { display:none; width:13px; height:13px; accent-color:var(--red); cursor:pointer; margin-top:10px; flex-shrink:0; }
+body.selmode .msg-cb { display:block; }
+body.selmode .msg.user      { flex-direction:row-reverse; gap:7px; }
+body.selmode .msg.assistant { flex-direction:row; gap:7px; }
+
+/* ── HUD DE INFERENCIA (barra compacta) ── */
+#inf-hud {
+  flex-shrink: 0; height: 0; overflow: hidden;
+  background: var(--bg2); border-top: 0px solid var(--border);
+  display: flex; align-items: center; padding: 0 22px; gap: 12px;
+  font-family: var(--mono); font-size: 9px;
+  transition: height .2s var(--ease), border-top-width .2s;
+}
+#inf-hud.visible { height: 28px; border-top-width: 1px; }
+.hud-phase {
+  font-size: 8px; font-weight: 600; padding: 2px 6px; border-radius: 2px;
+  letter-spacing: 1px; white-space: nowrap;
+}
+.hud-proc { color:var(--yellow); background:rgba(212,168,67,.1); border:1px solid rgba(212,168,67,.2); }
+.hud-gen  { color:var(--green);  background:rgba(62,207,110,.1);  border:1px solid rgba(62,207,110,.2); animation: gpulse 1s ease infinite; }
+.hud-done { color:var(--text3);  background:transparent; border:1px solid var(--border); }
+.hud-err  { color:var(--red);    background:rgba(224,86,86,.08); border:1px solid rgba(224,86,86,.2); }
+@keyframes gpulse { 0%,100%{opacity:1} 50%{opacity:.6} }
+.hud-item { display:flex; gap:4px; align-items:center; }
+.hud-lbl  { color:var(--text3); }
+.hud-val  { color:var(--text); font-weight:500; }
+.hud-acc  { color:var(--accent); font-weight:500; }
+.hud-bar  { width:60px; height:2px; background:var(--bg4); border-radius:1px; }
+.hud-bar-fill { height:100%; background:var(--green); border-radius:1px; transition:width .3s; }
+.hud-sep  { color:var(--border2); }
+
+/* Select toolbar */
+#sel-toolbar {
+  display:none; align-items:center; gap:8px;
+  padding:6px 22px; background:rgba(224,86,86,.07); border-top:1px solid rgba(224,86,86,.2);
+  font-family:var(--mono); font-size:9px; color:var(--text2); flex-shrink:0;
+}
+#sel-toolbar.on { display:flex; }
+
+/* ── INPUT ── */
+#input-wrap {
+  flex-shrink: 0; padding: 10px 22px 12px;
+  background: var(--bg2); border-top: 1px solid var(--border);
+  display: flex; gap: 7px; align-items: flex-end;
+}
+#user-input {
+  flex: 1; background: var(--bg3); border: 1px solid var(--border);
+  color: var(--text); padding: 8px 11px; font-size: 13px; font-family: var(--sans);
+  border-radius: 3px; resize: none; outline: none;
+  height: 38px; max-height: 150px; line-height: 1.5;
+  transition: border-color .15s;
+}
+#user-input:focus { border-color: var(--border2); }
+#btn-send {
+  height: 38px; padding: 0 16px; font-family: var(--mono); font-size: 9px;
+  font-weight: 600; letter-spacing: 1px; background: var(--accent2);
+  color: #fff; border: none; border-radius: 3px; cursor: pointer; transition: background .15s;
+}
+#btn-send:hover { background: var(--accent); }
+#btn-send:disabled { opacity:.4; pointer-events:none; }
+
+/* ── MODAL ── */
+.overlay { position:fixed; inset:0; background:rgba(0,0,0,.8); display:none; justify-content:center; align-items:center; z-index:200; backdrop-filter:blur(4px); }
+.overlay.on { display:flex; }
+.modal { background:var(--bg2); border:1px solid var(--border2); border-radius:5px; padding:20px; width:400px; display:flex; flex-direction:column; gap:12px; }
+.modal h3 { font-family:var(--mono); font-size:10px; font-weight:600; color:var(--accent); letter-spacing:1px; }
+.modal input,.modal textarea { width:100%; background:var(--bg3); border:1px solid var(--border); color:var(--text); padding:7px 9px; border-radius:2px; font-family:var(--sans); font-size:12px; outline:none; resize:none; }
+.modal input:focus,.modal textarea:focus { border-color:var(--border2); }
+.modal-btns { display:flex; justify-content:flex-end; gap:7px; }
+
+/* ── EMPTY STATE ── */
+.empty-state { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:7px; color:var(--text3); font-family:var(--mono); font-size:9px; letter-spacing:1px; }
+.empty-state .big { font-size:32px; opacity:.2; margin-bottom:10px; }
+
+/* ── SESSION PANEL ITEMS ── */
+.ses-item { padding:9px 12px; border-bottom:1px solid var(--border); cursor:pointer; transition:background .12s; }
+.ses-item:hover { background:var(--bg3); }
+.ses-item.loaded { background:rgba(100,148,255,.07); border-left:2px solid var(--accent); }
+.ses-item.loaded.resession { border-left-color:var(--purple); }
+.ses-title { font-family:var(--mono); font-size:9px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:2px; }
+.ses-sub   { font-family:var(--mono); font-size:8px; color:var(--text3); }
+.ses-tag   { display:inline-block; font-family:var(--mono); font-size:7px; color:var(--purple); background:rgba(167,139,250,.1); border:1px solid rgba(167,139,250,.25); padding:1px 5px; border-radius:2px; margin-top:2px; }
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div id="topbar">
+  <div class="tb-brand">LAB21</div>
+  <span style="font-family:var(--mono);font-size:8px;color:var(--text3);letter-spacing:1px;">v2.4</span>
+  <div id="resession-badge">RE-SESSION</div>
+  <div class="tb-sep"></div>
+
+  <div id="ctx-bar-wrap">
+    <span id="ctx-label" class="hud-lbl">ctx</span>
+    <div id="ctx-bar"><div id="ctx-fill"></div></div>
+    <span id="ctx-pct">0%</span>
+  </div>
+
+  <div class="tb-sep"></div>
+  <div id="ses-clock">sesión <b id="clk-ses">00:00</b> · acum <b id="clk-acum">00:00</b></div>
+  <div class="tb-spacer"></div>
+
+  <button class="tbtn" onclick="toggleSidebar()" id="btni">⟨ INF</button>
+  <div class="tb-sep"></div>
+  <button class="tbtn" id="btn-selmode" onclick="toggleSelectMode()">☐ SEL</button>
+  <button class="tbtn accent" onclick="abrirModalFin()">↓ GUARDAR</button>
+  <button id="btn-stop" class="tbtn red" onclick="doStop()">■ STOP</button>
+  <div class="tb-sep"></div>
+  <button class="tbtn" onclick="toggleSessions()" id="btns">SES ⟩</button>
+</div>
+
+<!-- WORKSPACE -->
+<div id="workspace">
+
+  <!-- SIDEBAR INFERENCIA -->
+  <div id="sidebar">
+    <div class="p-head">// INFERENCIA</div>
+    <div class="p-scroll">
+
+      <div class="p-section">
+        <span class="p-label">Modelo</span>
+        <select id="sel-model"><option value="">Cargando...</option></select>
+        <div id="meta-bar" class="meta-bar">—</div>
+      </div>
+
+      <div class="p-section">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <span class="p-label" style="margin:0">System Prompt</span>
+          <select id="sel-prompt" style="width:130px;font-size:8px;"><option value="">cargar .txt…</option></select>
+        </div>
+        <textarea id="sysp" class="sysp" placeholder="Eres un asistente…"></textarea>
+      </div>
+
+      <div class="p-section">
+        <span class="p-label">Parámetros</span>
+        <div class="sl-group">
+          <div class="sl-row"><span class="sl-name">Temperatura</span><span class="sl-val" id="v-temp">0.8</span></div>
+          <input type="range" id="sl-temp" min="0" max="2" step="0.05" value="0.8" oninput="sv('temp')">
+        </div>
+        <div class="sl-group">
+          <div class="sl-row"><span class="sl-name">Top P</span><span class="sl-val" id="v-topp">0.95</span></div>
+          <input type="range" id="sl-topp" min="0" max="1" step="0.05" value="0.95" oninput="sv('topp')">
+        </div>
+        <div class="sl-group">
+          <div class="sl-row"><span class="sl-name">Top K</span><span class="sl-val" id="v-topk">40</span></div>
+          <input type="range" id="sl-topk" min="0" max="100" step="1" value="40" oninput="sv('topk')">
+        </div>
+        <div class="sl-group">
+          <div class="sl-row"><span class="sl-name">Max Tokens</span><span class="sl-val" id="v-tokens">1024</span></div>
+          <input type="range" id="sl-tokens" min="128" max="8192" step="128" value="1024" oninput="sv('tokens')">
+        </div>
+        <div class="sl-group">
+          <div class="sl-row"><span class="sl-name">Timeout (s)</span><span class="sl-val" id="v-timeout">120</span></div>
+          <input type="range" id="sl-timeout" min="30" max="300" step="10" value="120" oninput="sv('timeout')">
+        </div>
+        <div class="sl-group" style="margin-top:12px;padding-top:10px;border-top:1px dashed var(--border);">
+          <div class="sl-row"><span class="sl-name" style="color:var(--accent)">Turnos Memoria</span><span class="sl-val" id="v-hist">6</span></div>
+          <input type="range" id="sl-hist" min="0" max="20" step="1" value="6" oninput="sv('hist')">
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- CHAT -->
+  <div id="chat-container">
+
+    <!-- Tabs de sesiones abiertas -->
+    <div id="session-tabs">
+      <button id="btn-new-tab" onclick="crearNuevaSesion()">+ nueva</button>
+    </div>
+
+    <!-- Vistas de chat (una por sesión abierta) -->
+    <div id="chat-views"></div>
+
+    <!-- HUD inferencia -->
+    <div id="inf-hud">
+      <span class="hud-phase hud-proc" id="hud-phase">PROCESSING</span>
+      <span class="hud-sep">·</span>
+      <div class="hud-item"><span class="hud-lbl">t</span><span class="hud-val" id="hud-t">0.0s</span></div>
+      <span class="hud-sep">·</span>
+      <div class="hud-item"><span class="hud-lbl">tk↓</span><span class="hud-acc" id="hud-tk">0</span></div>
+      <span class="hud-sep">·</span>
+      <div class="hud-item"><span class="hud-lbl">T/s</span><span class="hud-acc" id="hud-tps">—</span></div>
+      <span class="hud-sep">·</span>
+      <div class="hud-item"><span class="hud-lbl">tk↑</span><span class="hud-val" id="hud-ptk">—</span></div>
+      <span class="hud-sep">·</span>
+      <div class="hud-bar"><div class="hud-bar-fill" id="hud-bar-fill"></div></div>
+      <span style="font-family:var(--mono);font-size:8px;color:var(--text3);" id="hud-pct">0%</span>
+    </div>
+
+    <!-- Select toolbar -->
+    <div id="sel-toolbar">
+      <span id="sel-count">0 seleccionados</span>
+      <div style="flex:1"></div>
+      <button class="tbtn red" onclick="eliminarSeleccionados()">✕ ELIMINAR</button>
+      <button class="tbtn" onclick="toggleSelectMode()">CANCELAR</button>
+    </div>
+
+    <!-- Input -->
+    <div id="input-wrap">
+      <textarea id="user-input" placeholder="Escribe tu prompt  ·  Enter envía  ·  Shift+Enter línea nueva"></textarea>
+      <button id="btn-send" onclick="enviar()">ENVIAR</button>
+    </div>
+
+  </div>
+
+  <!-- PANEL SESIONES -->
+  <div id="ses-panel">
+    <div class="p-head">// SESIONES</div>
+    <div id="ses-list" class="p-scroll"></div>
+  </div>
+
+</div>
+
+<!-- MODAL GUARDAR -->
+<div id="modal-fin" class="overlay">
+  <div class="modal">
+    <h3>// REGISTRAR SESIÓN</h3>
+    <input  type="text" id="m-subtitulo"  placeholder="Subtítulo  (ej: stress test temperatura alta)">
+    <textarea id="m-reacciones" rows="4"  placeholder="Reacciones viscerales… qué pasó, qué falló, qué sorprendió"></textarea>
+    <div class="modal-btns">
+      <button class="tbtn" onclick="cerrarModal()">Cancelar</button>
+      <button class="tbtn accent" onclick="finalizarSesion()">Guardar sesión</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+//  ESTADO GLOBAL
+// ═══════════════════════════════════════════════════════════
+marked.setOptions({ breaks: true, gfm: true });
+
+let modelosCache = {};
+let sesAbiertas  = {};   // id → { id, titulo, interacciones[], turnoIdx, estadoBase, acum, esResession, origenId, lastSysPrompt }
+let sesActiva    = null; // id de la pestaña activa
+let generando    = false;
+let abortCtrl    = null;
+
+// Clock global
+let clockStart = Date.now();
+let clockIv    = null;
+
+// Escritura
+let teclaTs = null;
+
+// Select mode
+let selectMode  = false;
+let selSet      = new Set();
+
+// ═══════════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════════
+window.onload = async () => {
+  await cargarModelos();
+  await cargarListaPrompts();
+  await refrescarPanelSesiones();
+  crearNuevaSesion();
+  startClock();
+};
+
+// ═══════════════════════════════════════════════════════════
+//  CLOCK
+// ═══════════════════════════════════════════════════════════
+function startClock() {
+  clockStart = Date.now();
+  clockIv = setInterval(() => {
+    const ses = Math.floor((Date.now() - clockStart) / 1000);
+    document.getElementById("clk-ses").textContent  = fmt(ses);
+    const s = sesAbiertas[sesActiva];
+    document.getElementById("clk-acum").textContent = fmt(Math.round(s ? s.acum : 0));
+  }, 1000);
+}
+function fmt(s) { return `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`; }
+
+// ═══════════════════════════════════════════════════════════
+//  MODELOS
+// ═══════════════════════════════════════════════════════════
+async function cargarModelos() {
+  const res = await fetch("/api/modelos").catch(()=>null);
+  if (!res) return;
+  const data = await res.json();
+  const sel = document.getElementById("sel-model");
+  sel.innerHTML = "";
+  (data.data||[]).forEach(m => {
+    modelosCache[m.id] = m.metadatos;
+    const o = document.createElement("option");
+    o.value = m.id; o.textContent = m.id;
+    sel.appendChild(o);
+  });
+  actualizarMetaBar();
+  actualizarCtxBar();
+  sel.addEventListener("change", () => { actualizarMetaBar(); actualizarCtxBar(); });
+}
+
+function actualizarMetaBar() {
+  const m = modelosCache[document.getElementById("sel-model").value];
+  if (!m) return;
+  document.getElementById("meta-bar").innerHTML =
+    `<b>${m.familia}</b> · ${m.tamano} · ${m.cuantizacion} · ${m.size_gb}GB · ctx ${(m.contexto_max||4096).toLocaleString()}`;
+}
+
+function ctxMax() {
+  const m = modelosCache[document.getElementById("sel-model").value];
+  return (m && m.contexto_max) ? m.contexto_max : 4096;
+}
+
+function actualizarCtxBar(promptTokens) {
+  const s   = sesAbiertas[sesActiva];
+  const tot = promptTokens || (s ? s._lastPromptTok : 0) || 0;
+  const max = ctxMax();
+  const pct = Math.min(100, Math.round(tot / max * 100));
+  document.getElementById("ctx-fill").style.width  = pct + "%";
+  document.getElementById("ctx-pct").textContent   = pct + "%";
+  const fill = document.getElementById("ctx-fill");
+  fill.style.background = pct > 85 ? "var(--red)" : pct > 60 ? "var(--yellow)" : "var(--green)";
+  if (s) s._lastPromptTok = tot;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SLIDERS
+// ═══════════════════════════════════════════════════════════
+function sv(id) { document.getElementById("v-"+id).textContent = document.getElementById("sl-"+id).value; }
+
+function getEstado() {
+  return {
+    modelo:           document.getElementById("sel-model").value,
+    system_prompt:    document.getElementById("sysp").value.trim(),
+    origen_prompt:    window._promptNombre || "custom",
+    temperatura:      parseFloat(document.getElementById("sl-temp").value),
+    top_p:            parseFloat(document.getElementById("sl-topp").value),
+    top_k:            parseInt(document.getElementById("sl-topk").value),
+    max_tokens:       parseInt(document.getElementById("sl-tokens").value),
+    timeout_s:        parseInt(document.getElementById("sl-timeout").value),
+    limite_historial: parseInt(document.getElementById("sl-hist").value),
+  };
+}
+
+function setEstado(est) {
+  if (!est) return;
+  const setVal = (id, v) => { if (v !== undefined) { document.getElementById(id).value = v; } };
+  if (est.modelo) {
+    const sel = document.getElementById("sel-model");
+    [...sel.options].forEach(o => { if (o.value === est.modelo) sel.value = est.modelo; });
+    actualizarMetaBar(); actualizarCtxBar();
+  }
+  if (est.system_prompt !== undefined) document.getElementById("sysp").value = est.system_prompt;
+  setVal("sl-temp",    est.temperatura);     sv("temp");
+  setVal("sl-topp",    est.top_p);           sv("topp");
+  setVal("sl-topk",    est.top_k);           sv("topk");
+  setVal("sl-tokens",  est.max_tokens);      sv("tokens");
+  setVal("sl-timeout", est.timeout_s);       sv("timeout");
+  setVal("sl-hist",    est.limite_historial);sv("hist");
+}
+
+// ═══════════════════════════════════════════════════════════
+//  PROMPTS
+// ═══════════════════════════════════════════════════════════
+window._promptNombre = "";
+window._promptTexto  = "";
+window._cargandoP    = false;
+
+async function cargarListaPrompts() {
+  const res = await fetch("/api/prompts").catch(()=>null);
+  if (!res) return;
+  const data = await res.json();
+  const sel  = document.getElementById("sel-prompt");
+  (data.prompts||[]).forEach(p => {
+    const o = document.createElement("option"); o.value = p; o.textContent = p; sel.appendChild(o);
+  });
+  sel.addEventListener("change", async e => {
+    if (!e.target.value) return;
+    window._cargandoP = true;
+    const r = await fetch(`/api/prompts/${e.target.value}`);
+    const d = await r.json();
+    document.getElementById("sysp").value = d.contenido;
+    window._promptTexto  = d.contenido.trim();
+    window._promptNombre = e.target.value.replace(".txt","");
+    setTimeout(() => window._cargandoP = false, 60);
+  });
+  document.getElementById("sysp").addEventListener("input", () => {
+    if (!window._cargandoP && window._promptNombre) {
+      const cur = document.getElementById("sysp").value.trim();
+      if (cur !== window._promptTexto) window._promptNombre = window._promptNombre.replace("+custom","") + "+custom";
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  WORKSPACE MULTI-SESIÓN
+// ═══════════════════════════════════════════════════════════
+function crearNuevaSesion(opts = {}) {
+  const id = opts.id || ("lab_" + Math.floor(Date.now()/1000) + "_" + Math.random().toString(36).slice(2,5));
+  sesAbiertas[id] = {
+    id, titulo: opts.titulo || "nueva sesión",
+    interacciones: opts.interacciones || [],
+    turnoIdx:      opts.turnoIdx      || 0,
+    estadoBase:    null,
+    acum:          opts.acum          || 0,
+    _lastPromptTok: 0,
+    esResession:   opts.esResession   || false,
+    origenId:      opts.origenId      || null,
+    lastSysPrompt: opts.lastSysPrompt || "",
+  };
+
+  // Crear vista de chat
+  const view = document.createElement("div");
+  view.className = "chat-view";
+  view.id = "view_" + id;
+  view.innerHTML = `<div class="empty-state"><div class="big">◎</div><span>LAB21 // MODO DERRETIDO</span><span style="color:var(--text3);margin-top:4px;">escribe para comenzar</span></div>`;
+  document.getElementById("chat-views").appendChild(view);
+
+  // Crear tab
+  const tab = document.createElement("div");
+  tab.className = "s-tab" + (opts.esResession ? " resession" : "");
+  tab.id = "tab_" + id;
+  tab.onclick = () => activarSesion(id);
+  tab.innerHTML = `<span class="tab-dot"></span><span class="tab-label">${esc(sesAbiertas[id].titulo)}</span><button class="tab-close" onclick="cerrarTab('${id}',event)">×</button>`;
+  document.getElementById("session-tabs").insertBefore(tab, document.getElementById("btn-new-tab"));
+
+  activarSesion(id);
+
+  // Si hay contenido previo (re-sesión), renderizarlo
+  if (opts.interacciones && opts.interacciones.length > 0) {
+    opts.interacciones.forEach(it => {
+      if (it.role_user !== undefined) renderTurno(id, it.role_user, it.role_assistant || "", it.turno||0, getEstado(), it.metricas||{}, { editado: it.editado });
+    });
+    getView(id).scrollTop = getView(id).scrollHeight;
+  }
+
+  // Registrar sesión en servidor
+  iniciarEnServidor(id, opts.esResession, opts.origenId);
+  return id;
+}
+
+function activarSesion(id) {
+  if (!sesAbiertas[id]) return;
+  sesActiva = id;
+
+  // Tabs
+  document.querySelectorAll(".s-tab").forEach(t => t.classList.remove("active"));
+  const tab = document.getElementById("tab_"+id);
+  if (tab) tab.classList.add("active");
+
+  // Views
+  document.querySelectorAll(".chat-view").forEach(v => v.classList.remove("active"));
+  const view = document.getElementById("view_"+id);
+  if (view) view.classList.add("active");
+
+  // Badge
+  const s = sesAbiertas[id];
+  const badge = document.getElementById("resession-badge");
+  badge.style.display = s.esResession ? "block" : "none";
+  if (s.esResession) badge.textContent = `RE-SESSION // ${s.origenId}`;
+
+  actualizarCtxBar();
+}
+
+function cerrarTab(id, e) {
+  e.stopPropagation();
+  if (Object.keys(sesAbiertas).length <= 1) {
+    // Última tab: crear nueva antes de cerrar
+    crearNuevaSesion();
+  }
+  delete sesAbiertas[id];
+  document.getElementById("tab_"+id)?.remove();
+  document.getElementById("view_"+id)?.remove();
+  // Activar otra
+  const ids = Object.keys(sesAbiertas);
+  if (ids.length > 0) activarSesion(ids[ids.length-1]);
+}
+
+function getView(id) { return document.getElementById("view_" + (id || sesActiva)); }
+
+async function iniciarEnServidor(id, esResession, origenId) {
+  const est = getEstado();
+  await fetch("/api/sesiones/iniciar", {
+    method: "POST", headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({
+      id_sesion: id, modelo: est.modelo, system_prompt: est.system_prompt,
+      parametros: est, es_resesion: !!esResession, sesion_origen: origenId || null
+    })
+  }).catch(()=>{});
+}
+
+// ═══════════════════════════════════════════════════════════
+//  CARGAR SESIÓN GUARDADA (alternativa radical)
+// ═══════════════════════════════════════════════════════════
+async function abrirSesionGuardada(id) {
+  // Si ya está abierta, solo activar
+  if (sesAbiertas[id]) { activarSesion(id); return; }
+
+  const res = await fetch(`/api/sesiones/${id}`).catch(()=>null);
+  if (!res || !res.ok) return;
+  const data = await res.json();
+
+  // Restaurar estado de inferencia
+  const est = data.parametros_finales || data.parametros_iniciales || {};
+  setEstado(est);
+  if (data.system_prompt) document.getElementById("sysp").value = data.system_prompt;
+
+  const nuevaId = "lab_res_" + Math.floor(Date.now()/1000);
+
+  crearNuevaSesion({
+    id:             nuevaId,
+    titulo:         data.titulo_ia || id,
+    interacciones:  data.interacciones || [],
+    turnoIdx:       (data.interacciones||[]).filter(i => i.role_user !== undefined).length,
+    esResession:    true,
+    origenId:       id,
+    lastSysPrompt:  data.system_prompt || "",
+  });
+
+  // Inyectar separador de re-sesión visible
+  const view = getView(nuevaId);
+  const sep = document.createElement("div");
+  sep.className = "resession-sep";
+  const dias = Math.round((Date.now() - new Date(data.fecha).getTime()) / 86400000);
+  sep.innerHTML = `⟲ RE-SESSION &nbsp;·&nbsp; origen: <b>${data.titulo_ia||id}</b><br>fecha original: ${new Date(data.fecha).toLocaleDateString("es-CL",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"})} · hace ${dias} día${dias!==1?"s":""}<br><span style="color:var(--text3);font-size:8px;">Nota: el modelo recibe el historial completo como contexto continuo. Los parámetros e inferencia han sido restaurados al estado original.</span>`;
+  // Insertar al inicio del view (después del empty state si existe)
+  const empty = view.querySelector(".empty-state");
+  if (empty) empty.remove();
+  view.insertBefore(sep, view.firstChild);
+
+  // Actualizar panel de sesiones
+  document.querySelectorAll(".ses-item").forEach(el => {
+    el.classList.toggle("loaded", el.dataset.id === id);
+  });
+
+  // Poner el historial en memoria de la nueva sesión para continuar
+  const s = sesAbiertas[nuevaId];
+  s.interacciones = [];
+  (data.interacciones||[]).forEach(it => {
+    if (it.role_user !== undefined) {
+      s.interacciones.push({ role:"user",      content: it.role_user      });
+      s.interacciones.push({ role:"assistant", content: it.role_assistant });
+      s.turnoIdx++;
+    } else if (it.role) {
+      s.interacciones.push(it);
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  INPUT / ESCRITURA
+// ═══════════════════════════════════════════════════════════
+document.addEventListener("DOMContentLoaded", () => {
+  const inp = document.getElementById("user-input");
+  inp.addEventListener("keydown", e => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); enviar(); return; }
+    if (!teclaTs && e.key.length === 1) teclaTs = Date.now();
+  });
+  inp.addEventListener("input", () => {
+    if (!teclaTs) teclaTs = Date.now();
+    inp.style.height = "38px";
+    inp.style.height = Math.min(inp.scrollHeight, 150) + "px";
+  });
+});
+
+// ═══════════════════════════════════════════════════════════
+//  ENVIAR MENSAJE
+// ═══════════════════════════════════════════════════════════
+async function enviar() {
+  const inp    = document.getElementById("user-input");
+  const texto  = inp.value.trim();
+  if (!texto || generando || !sesActiva) return;
+
+  const s = sesAbiertas[sesActiva];
+  const est = getEstado();
+
+  // Detectar cambio de system prompt
+  if (s.lastSysPrompt && s.lastSysPrompt !== est.system_prompt && s.interacciones.length > 0) {
+    const view = getView();
+    const sep  = document.createElement("div");
+    sep.className = "prompt-change-sep";
+    sep.textContent = `system prompt modificado · ${s.lastSysPrompt.slice(0,30)}… → ${est.system_prompt.slice(0,30)}…`;
+    view.appendChild(sep);
+  }
+  s.lastSysPrompt = est.system_prompt;
+
+  const tiempoEsc = teclaTs ? Math.round((Date.now()-teclaTs)/100)/10 : 0;
+  teclaTs = null;
+  s.acum += tiempoEsc;
+
+  inp.value = ""; inp.style.height = "38px";
+
+  // Empty state
+  const empty = getView()?.querySelector(".empty-state");
+  if (empty) empty.remove();
+
+  const idx = s.turnoIdx;
+  s.turnoIdx++;
+
+  // Historial recortado
+  let hist = [], turnos = 0;
+  for (let i = s.interacciones.length-1; i >= 0 && turnos < est.limite_historial; i--) {
+    const it = s.interacciones[i];
+    if (it.role !== "system") { hist.unshift({role:it.role, content:it.content}); if (it.role==="user") turnos++; }
+  }
+
+  // Renderizar user
+  const view = getView();
+  renderUserBubble(view, texto, idx, sesActiva);
+  s.interacciones.push({ role:"user", content: texto });
+
+  // Bot placeholder
+  const botEl = renderBotBubble(view, idx, est, sesActiva);
+  const contentEl = botEl.querySelector(".bubble-content");
+
+  setGenerando(true);
+  hudShow("processing");
+
+  const inferStart = Date.now();
+  let hudIv = setInterval(() => {
+    document.getElementById("hud-t").textContent = ((Date.now()-inferStart)/1000).toFixed(1)+"s";
+  }, 100);
+
+  abortCtrl = new AbortController();
+  let fullText = "", metricas = { tiempo_s:0, tps:0, prompt_tokens:0, output_tokens:0 };
+
+  try {
+    const res = await fetch("/api/inferencia", {
+      method: "POST", signal: abortCtrl.signal,
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ ...est, id_sesion: sesActiva, mensajes_historial: hist,
+                             prompt_actual: texto, tiempo_escritura_s: tiempoEsc })
+    });
+
+    const reader  = res.body.getReader();
+    const decoder = new TextDecoder();
+    contentEl.textContent = "";
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      const lines = decoder.decode(value).split("\n");
+      for (const line of lines) {
+        if (!line.trim()) continue;
+
+        if (line.startsWith("[PROMPT_DONE]||")) {
+          const p = line.split("||");
+          metricas.prompt_tokens = parseInt(p[1])||0;
+          actualizarCtxBar(metricas.prompt_tokens);
+          hudUpdate("processing", 0, 0, metricas.prompt_tokens, 0, est.max_tokens);
+
+        } else if (line.startsWith("[TK]||")) {
+          const p = line.split("||");
+          const tok    = (p[1]||"").replace(/\\n/g,"\n").replace(/\\\\/g,"\\");
+          const outTok = parseInt(p[2])||0;
+          const tpsL   = parseFloat(p[3])||0;
+          metricas.output_tokens = outTok;
+          fullText += tok;
+          contentEl.innerHTML = marked.parse(fullText);
+          view.scrollTop = view.scrollHeight;
+          hudUpdate("generating", null, tpsL, metricas.prompt_tokens, outTok, est.max_tokens);
+
+        } else if (line.startsWith("[DONE]||")) {
+          const p = line.split("||");
+          metricas.tiempo_s      = parseFloat(p[1])||0;
+          metricas.tps           = parseFloat(p[2])||0;
+          metricas.prompt_tokens = parseInt(p[3])||metricas.prompt_tokens;
+          metricas.output_tokens = parseInt(p[4])||metricas.output_tokens;
+          hudUpdate("done", metricas.tiempo_s, metricas.tps, metricas.prompt_tokens, metricas.output_tokens, est.max_tokens);
+
+        } else if (line.startsWith("[ABORTED]")) {
+          contentEl.innerHTML += `<span style="color:var(--red);font-family:var(--mono);font-size:10px;"> [■ ABORTADO]</span>`;
+          hudUpdate("err");
+          mostrarScrubPrompt(botEl, idx, sesActiva);
+
+        } else if (line.startsWith("[ERROR]||")) {
+          const tipo = line.split("||")[1]||"error";
+          contentEl.innerHTML = `<span style="color:var(--red);font-family:var(--mono);font-size:10px;">[ERROR: ${esc(tipo)}]</span>`;
+          hudUpdate("err");
+        }
+      }
+    }
+  } catch(err) {
+    clearInterval(hudIv);
+    if (err.name !== "AbortError") {
+      contentEl.textContent = "Error de conexión.";
+      hudUpdate("err");
+    }
+  }
+
+  clearInterval(hudIv);
+  setGenerando(false);
+  abortCtrl = null;
+
+  // Guardar turno en memoria y servidor
+  s.interacciones.push({ role:"assistant", content: fullText, metricas });
+  s.acum += metricas.tiempo_s;
+  guardarDelta(idx, est, s);
+  mostrarHerramientasTurno(botEl, idx, sesActiva, est, metricas);
+  persistirTurno(sesActiva, idx, est, texto, fullText, tiempoEsc, metricas);
+  guardarLS();
+
+  // Ocultar HUD tras 4s
+  setTimeout(() => hudHide(), 4000);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  STOP
+// ═══════════════════════════════════════════════════════════
+function doStop() {
+  if (!generando) return;
+  // Matar en servidor (Ollama)
+  fetch("/api/inferencia/abortar", {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ id_sesion: sesActiva })
+  }).catch(()=>{});
+  // Matar stream local
+  if (abortCtrl) abortCtrl.abort();
+}
+
+function mostrarScrubPrompt(botEl, idx, sid) {
+  const div = document.createElement("div");
+  div.style.cssText = "margin-top:8px;background:rgba(224,86,86,.07);border:1px solid rgba(224,86,86,.25);border-radius:3px;padding:9px 11px;font-family:var(--mono);font-size:9px;";
+  div.innerHTML = `<div style="color:var(--red);margin-bottom:7px;">■ Generación interrumpida — ¿qué hacemos con esta interacción?</div>
+    <div style="display:flex;gap:7px;">
+      <button onclick="borrarTurno('${sid}',${idx},this.closest('.msg'))" style="background:var(--red);color:#fff;border:none;border-radius:2px;padding:4px 11px;cursor:pointer;font-family:var(--mono);font-size:9px;">Borrar interacción</button>
+      <button onclick="this.closest('div[style]').remove()" style="background:transparent;color:var(--text2);border:1px solid var(--border);border-radius:2px;padding:4px 11px;cursor:pointer;font-family:var(--mono);font-size:9px;">Conservar</button>
+    </div>`;
+  botEl.querySelector(".msg-inner").appendChild(div);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  RENDER MENSAJES
+// ═══════════════════════════════════════════════════════════
+function renderUserBubble(view, texto, idx, sid) {
+  const div = document.createElement("div");
+  div.className = "msg user"; div.dataset.turno = idx; div.dataset.sid = sid;
+  div.innerHTML = `<input type="checkbox" class="msg-cb" onchange="toggleSel(${idx},this)">
+    <div class="msg-inner" style="display:flex;flex-direction:column;align-items:flex-end;">
+      <div class="msg-meta">tú <span id="em_${sid}_${idx}"></span></div>
+      <div class="msg-bubble" id="ub_${sid}_${idx}">${esc(texto)}</div>
+      <div class="turn-tools" id="utools_${sid}_${idx}">
+        <button class="t-btn" onclick="editarBurbuja('${sid}',${idx},'user')">✎</button>
+        <button class="t-btn danger" onclick="borrarTurno('${sid}',${idx},this.closest('.msg'))">✕</button>
+      </div>
+    </div>`;
+  view.appendChild(div);
+  view.scrollTop = view.scrollHeight;
+}
+
+function renderBotBubble(view, idx, est, sid) {
+  const div = document.createElement("div");
+  div.className = "msg assistant"; div.dataset.turno = idx; div.dataset.sid = sid;
+  div.id = `bmsg_${sid}_${idx}`;
+  div.innerHTML = `<input type="checkbox" class="msg-cb" onchange="toggleSel(${idx},this)">
+    <div class="msg-inner" style="flex:1;min-width:0;">
+      <div class="msg-meta">${esc(est.modelo)} <span id="bm_${sid}_${idx}"></span></div>
+      <div class="msg-bubble"><div class="bubble-content" style="font-size:13px;">⏳ procesando…</div></div>
+      <div class="turn-tools" id="btools_${sid}_${idx}" style="display:none;"></div>
+      <div class="t-params" id="bparams_${sid}_${idx}">
+        T:${est.temperatura} · P:${est.top_p} · K:${est.top_k} · max:${est.max_tokens}<br>
+        sys(${esc(est.origen_prompt)}): ${esc(est.system_prompt.slice(0,80))}…
+      </div>
+    </div>`;
+  view.appendChild(div);
+  view.scrollTop = view.scrollHeight;
+  return div;
+}
+
+function renderTurno(sid, userText, assistText, idx, est, metricas, opts) {
+  const view = getView(sid);
+  if (!view) return;
+  const empty = view.querySelector(".empty-state");
+  if (empty) empty.remove();
+  renderUserBubble(view, userText, idx, sid);
+  const botEl = renderBotBubble(view, idx, est, sid);
+  botEl.querySelector(".bubble-content").innerHTML = marked.parse(assistText||"");
+  mostrarHerramientasTurno(botEl, idx, sid, est, metricas);
+  if (opts?.editado) {
+    const em = document.getElementById(`em_${sid}_${idx}`);
+    if (em) em.innerHTML = '<span class="edited-badge">[editado]</span>';
+    const bm = document.getElementById(`bm_${sid}_${idx}`);
+    if (bm) bm.innerHTML = '<span class="edited-badge">[editado]</span>';
+  }
+}
+
+function mostrarHerramientasTurno(botEl, idx, sid, est, m) {
+  const tools = document.getElementById(`btools_${sid}_${idx}`);
+  if (!tools) return;
+  tools.style.display = "flex";
+  tools.innerHTML = `
+    <span class="t-metric">${m.tiempo_s||0}s · ${m.tps||0} T/s · ↑${m.prompt_tokens||0} ↓${m.output_tokens||0}</span>
+    <button class="t-btn" onclick="toggleParams('${sid}',${idx})">[⚙]</button>
+    <button class="t-btn" onclick="editarBurbuja('${sid}',${idx},'assistant')">✎</button>
+    <button class="t-btn danger" onclick="borrarTurno('${sid}',${idx},this.closest('.msg'))">✕</button>`;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  EDICIÓN INLINE
+// ═══════════════════════════════════════════════════════════
+function editarBurbuja(sid, idx, rol) {
+  const bId   = rol === "user" ? `ub_${sid}_${idx}` : `bmsg_${sid}_${idx}`;
+  const bubbleEl = rol === "user"
+    ? document.getElementById(`ub_${sid}_${idx}`)
+    : document.querySelector(`#bmsg_${sid}_${idx} .msg-bubble`);
+  if (!bubbleEl) return;
+
+  const textoActual = sesAbiertas[sid]?.interacciones.find((it,i) =>
+    rol === "user" ? (it.role==="user" && Math.floor(i/2)===idx) : (it.role==="assistant" && Math.floor(i/2)===idx)
+  )?.content || bubbleEl.textContent || "";
+
+  const ta = document.createElement("textarea");
+  ta.className = "edit-area";
+  ta.value = textoActual;
+  const acts = document.createElement("div");
+  acts.className = "edit-actions";
+  acts.innerHTML = `<button class="edit-ok">✓ Confirmar</button><button class="edit-cancel">✕</button>`;
+
+  const orig = bubbleEl.innerHTML;
+  bubbleEl.innerHTML = "";
+  bubbleEl.appendChild(ta);
+  bubbleEl.appendChild(acts);
+  ta.focus();
+
+  acts.querySelector(".edit-cancel").onclick = () => { bubbleEl.innerHTML = orig; };
+  acts.querySelector(".edit-ok").onclick = async () => {
+    const nuevo = ta.value.trim();
+    if (!nuevo) return;
+    // Actualizar en memoria
+    const s = sesAbiertas[sid];
+    if (s) {
+      let ui = 0;
+      for (let i=0; i<s.interacciones.length; i++) {
+        if (s.interacciones[i].role === "user")      { if (ui === idx && rol === "user")      { s.interacciones[i].content = nuevo; break; } ui++; }
+        if (s.interacciones[i].role === "assistant") { if (ui-1 === idx && rol === "assistant") { s.interacciones[i].content = nuevo; break; } }
+      }
+    }
+    // Renderizar
+    if (rol === "assistant") {
+      bubbleEl.innerHTML = marked.parse(nuevo);
+    } else {
+      bubbleEl.textContent = nuevo;
+    }
+    // Badge editado
+    const em = document.getElementById(rol==="user" ? `em_${sid}_${idx}` : `bm_${sid}_${idx}`);
+    if (em) em.innerHTML = '<span class="edited-badge">[editado]</span>';
+    // Persistir
+    const campo = rol === "user" ? "prompt_usuario" : "respuesta_modelo";
+    await fetch("/api/sesiones/turno/editar", {
+      method:"PUT", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ id_sesion: sid, turno: idx, campo, contenido: nuevo })
+    }).catch(()=>{});
+    guardarLS();
+  };
+}
+
+// ═══════════════════════════════════════════════════════════
+//  BORRAR TURNO (limpio, sin fantasmas)
+// ═══════════════════════════════════════════════════════════
+function borrarTurno(sid, idx, refEl) {
+  const s = sesAbiertas[sid];
+  if (!s) return;
+  const view = getView(sid);
+  if (!view) return;
+
+  // Borrar del DOM todos los nodos con turno >= idx de esta sesión
+  [...view.querySelectorAll(`.msg[data-sid="${sid}"]`)].forEach(el => {
+    if (parseInt(el.dataset.turno) >= idx) el.remove();
+  });
+
+  // Borrar de memoria: los turnos son pares user+assistant, cada turno = 2 entradas
+  // Encontrar posición real en el array
+  let userCount = 0, cutPos = -1;
+  for (let i=0; i<s.interacciones.length; i++) {
+    if (s.interacciones[i].role === "user") {
+      if (userCount === idx) { cutPos = i; break; }
+      userCount++;
+    }
+  }
+  if (cutPos >= 0) s.interacciones.splice(cutPos);
+  s.turnoIdx = idx;
+
+  // Borrar en servidor
+  fetch(`/api/sesiones/${sid}/turnos`, {
+    method:"DELETE", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ id_sesion: sid, turnos: [...Array(100)].map((_,i)=>i+idx) })
+  }).catch(()=>{});
+
+  guardarLS();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  PARAMS TOGGLE
+// ═══════════════════════════════════════════════════════════
+function toggleParams(sid, idx) {
+  const p = document.getElementById(`bparams_${sid}_${idx}`);
+  if (p) p.style.display = p.style.display === "block" ? "none" : "block";
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SELECT MODE
+// ═══════════════════════════════════════════════════════════
+function toggleSelectMode() {
+  selectMode = !selectMode; selSet.clear();
+  document.body.classList.toggle("selmode", selectMode);
+  document.getElementById("sel-toolbar").classList.toggle("on", selectMode);
+  document.getElementById("btn-selmode").classList.toggle("on", selectMode);
+  if (!selectMode) document.querySelectorAll(".msg-cb").forEach(c => c.checked = false);
+  document.getElementById("sel-count").textContent = "0 seleccionados";
+}
+
+function toggleSel(idx, cb) {
+  cb.checked ? selSet.add(idx) : selSet.delete(idx);
+  document.getElementById("sel-count").textContent = `${selSet.size} seleccionado${selSet.size!==1?"s":""}`;
+}
+
+function eliminarSeleccionados() {
+  if (!selSet.size || !sesActiva) return;
+  const idxs = [...selSet].sort((a,b)=>b-a);
+  idxs.forEach(idx => borrarTurno(sesActiva, idx, null));
+  toggleSelectMode();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  HUD DE INFERENCIA
+// ═══════════════════════════════════════════════════════════
+function hudShow(fase) {
+  const hud = document.getElementById("inf-hud");
+  hud.classList.add("visible");
+  setHudFase(fase);
+}
+function hudHide() { document.getElementById("inf-hud").classList.remove("visible"); }
+
+function hudUpdate(fase, tiempo, tps, ptk, outTk, maxTok) {
+  setHudFase(fase);
+  if (tiempo != null) document.getElementById("hud-t").textContent   = tiempo+"s";
+  if (tps    != null) document.getElementById("hud-tps").textContent = tps;
+  if (ptk    != null) document.getElementById("hud-ptk").textContent = ptk;
+  if (outTk  != null) {
+    document.getElementById("hud-tk").textContent = outTk;
+    if (maxTok) {
+      const pct = Math.min(100, Math.round(outTk/maxTok*100));
+      document.getElementById("hud-bar-fill").style.width = pct+"%";
+      document.getElementById("hud-pct").textContent      = pct+"%";
+    }
+  }
+}
+
+function setHudFase(fase) {
+  const el = document.getElementById("hud-phase");
+  el.className = `hud-phase hud-${fase==="processing"?"proc":fase==="generating"?"gen":fase==="done"?"done":"err"}`;
+  el.textContent = { processing:"PROCESSING", generating:"GENERATING", done:"DONE", err:"ERROR" }[fase] || fase.toUpperCase();
+}
+
+// ═══════════════════════════════════════════════════════════
+//  GUARDAR / PERSISTIR
+// ═══════════════════════════════════════════════════════════
+function guardarDelta(idx, est, s) {
+  const reg = s.interacciones[s.interacciones.length-1]; // la respuesta que se acaba de guardar
+  if (!s.estadoBase) {
+    s.estadoBase = est;
+    reg.estado_inferencia = est;
+  } else {
+    const cambios = {};
+    for (let k in est) { if (est[k] !== s.estadoBase[k]) cambios[k] = est[k]; }
+    if (Object.keys(cambios).length > 0) { reg.cambios_inferencia = cambios; s.estadoBase = est; }
+  }
+}
+
+function guardarLS() {
+  try {
+    const snap = {};
+    for (const [id, s] of Object.entries(sesAbiertas)) {
+      snap[id] = { id: s.id, titulo: s.titulo, interacciones: s.interacciones.slice(-60),
+                   turnoIdx: s.turnoIdx, acum: s.acum, esResession: s.esResession, origenId: s.origenId };
+    }
+    localStorage.setItem("lab21_ws", JSON.stringify({ ts: Date.now(), sesiones: snap, activa: sesActiva }));
+  } catch(e) {}
+}
+
+async function persistirTurno(sid, idx, est, prompt, respuesta, tiempoEsc, m) {
+  await fetch("/api/sesiones/turno", {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({
+      id_sesion: sid, turno: idx, modelo: est.modelo,
+      prompt_usuario: prompt, respuesta_modelo: respuesta,
+      tiempo_escritura_s: tiempoEsc, tiempo_inferencia_s: m.tiempo_s,
+      tps: m.tps, prompt_tokens: m.prompt_tokens, output_tokens: m.output_tokens
+    })
+  }).catch(()=>{});
+}
+
+// ═══════════════════════════════════════════════════════════
+//  PANEL DE SESIONES
+// ═══════════════════════════════════════════════════════════
+async function refrescarPanelSesiones() {
+  const res = await fetch("/api/sesiones").catch(()=>null);
+  if (!res) return;
+  const data = await res.json();
+  const list = document.getElementById("ses-list");
+  const sesiones = data.sesiones || [];
+  if (!sesiones.length) {
+    list.innerHTML = `<div style="padding:18px 12px;color:var(--text3);font-family:var(--mono);font-size:9px;">Sin sesiones guardadas</div>`;
+    return;
+  }
+  list.innerHTML = sesiones.map(s => {
+    const fecha = new Date(s.fecha).toLocaleDateString("es-CL",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
+    const dur   = fmt(Math.round(s.duracion_total_s||0));
+    const abierta = !!sesAbiertas[s.id_sesion];
+    return `<div class="ses-item${abierta?" loaded":""} ${s.es_resesion?"resession":""}"
+               data-id="${s.id_sesion}" onclick="abrirSesionGuardada('${s.id_sesion}')">
+      <div class="ses-title">${esc(s.titulo||s.id_sesion)}</div>
+      <div class="ses-sub">${fecha} · ${dur}</div>
+      ${s.subtitulo ? `<div class="ses-sub" style="color:var(--text2)">${esc(s.subtitulo)}</div>` : ""}
+      ${s.es_resesion ? `<span class="ses-tag">RE-SESSION</span>` : ""}
+    </div>`;
+  }).join("");
+}
+
+// ═══════════════════════════════════════════════════════════
+//  MODAL GUARDAR
+// ═══════════════════════════════════════════════════════════
+function abrirModalFin() {
+  const s = sesAbiertas[sesActiva];
+  if (!s || s.interacciones.length === 0) { alert("No hay interacciones para guardar."); return; }
+  document.getElementById("modal-fin").classList.add("on");
+}
+
+function cerrarModal() { document.getElementById("modal-fin").classList.remove("on"); }
+
+async function finalizarSesion() {
+  const s   = sesAbiertas[sesActiva];
+  const est = getEstado();
+  const payload = {
+    id_sesion:             sesActiva,
+    subtitulo_humano:      document.getElementById("m-subtitulo").value,
+    reacciones_viscerales: document.getElementById("m-reacciones").value,
+    historial_completo:    s.interacciones,
+    parametros_finales:    est,
+    metadatos_modelo:      modelosCache[est.modelo] || {},
+    duracion_total_s:      Math.round(s.acum),
+    es_resesion:           s.esResession,
+    sesion_origen:         s.origenId || null,
+  };
+  const res  = await fetch("/api/sesiones/finalizar", {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+  cerrarModal();
+  await refrescarPanelSesiones();
+  // Actualizar título del tab
+  const tab = document.getElementById("tab_"+sesActiva);
+  if (tab) tab.querySelector(".tab-label").textContent = data.titulo_ia;
+  if (s)   s.titulo = data.titulo_ia;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  UI HELPERS
+// ═══════════════════════════════════════════════════════════
+function setGenerando(v) {
+  generando = v;
+  document.getElementById("btn-send").disabled  = v;
+  document.getElementById("btn-stop").classList.toggle("active", v);
+}
+
+function toggleSidebar() {
+  document.getElementById("sidebar").classList.toggle("off");
+}
+function toggleSessions() {
+  document.getElementById("ses-panel").classList.toggle("off");
+}
+
+function esc(s) {
+  return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+</script>
+</body>
+</html>
